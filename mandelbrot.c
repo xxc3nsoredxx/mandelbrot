@@ -16,11 +16,10 @@ void handler () {
 
 unsigned int color (char r, char g, char b, char a) {
     unsigned int ret = 0;
-    /* 0xBBGGRRAA */
-    ret |= b << 24;
-    ret |= g << 16;
-    ret |= r << 8;
-    ret |= a;
+    ret |= a << 24;
+    ret |= r << 16;
+    ret |= g << 8;
+    ret |= b;
     return ret;
 }
 
@@ -88,7 +87,7 @@ int main () {
     }
 
     for (row = 0; row < info.yres_virtual; row++) {
-        paint (fb, position (row, row), color (255, 255, 255, 255));
+        paint (fb, position (row, row), color (255, 255, 255, 0));
     }
 
     /* Close the framebuffer */
