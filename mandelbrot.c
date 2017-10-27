@@ -14,6 +14,7 @@ void handler () {
     interrupted = 1;
 }
 
+/* Creates a color from r, g, b, and a values */
 unsigned int color (char r, char g, char b, char a) {
     unsigned int ret = 0;
     ret |= a << 24;
@@ -23,10 +24,12 @@ unsigned int color (char r, char g, char b, char a) {
     return ret;
 }
 
+/* Turns row,col into an absolute position */
 unsigned int position (int row, int col) {
     return (row * (finfo.line_length / (info.bits_per_pixel / 8))) + col;
 }
 
+/* Draws the pixel to the screen */
 void paint (unsigned int *fb, unsigned int pos, unsigned int color) {
     *(fb + pos) = color;
 }
