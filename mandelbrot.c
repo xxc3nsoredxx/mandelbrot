@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <math.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,13 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+
+#define MAX_ITER 100
+
+typedef struct {
+    double re;
+    double im;
+} complex_t;
 
 /* Global variables */
 volatile sig_atomic_t interrupted = 0;
@@ -39,24 +47,68 @@ unsigned int position (unsigned int row, unsigned int col) {
 }
 
 /* Turns a complex point into an absolute position */
-unsigned int c_position (double re, double im) {
+unsigned int c_position (complex_t c) {
     double domain_percent;
     double range_percent;
 
     /* Return -1 if the position is outside the domain/range */
-    if (re < domain_min || re > domain_max) return -1;
-    else if (im < range_min || im > range_max) return -1;
+    if (c.re < domain_min || c.re > domain_max) return -1;
+    else if (c.im < range_min || c.im > range_max) return -1;
 
     /* Fix the point */
-    re -= domain_min;
-    im -= range_min;
+    c.re -= domain_min;
+    c.im -= range_min;
 
     /* Calculate how far in the point is compared the domain/range */
-    domain_percent = re / domain_normal;
-    range_percent = 1 - (im / range_normal);
+    domain_percent = c.re / domain_normal;
+    range_percent = 1 - (c.im / range_normal);
 
     return position ((unsigned int)(range_percent * info.yres_virtual),
                      (unsigned int)(domain_percent * info.xres_virtual));
+}
+
+double mag (complex_t c) {
+    return sqrt ((c.re * c.re) + (c.im * c.im));
+}
+
+complex_t mult (complex_t a, complex_t b) {
+    complex_t ret = {
+        .re = 0,
+        .im = 0
+    };
+
+    ret.re = (a.re * b.re) - (a.im * b.im);
+    ret.im = (a.im * b.re) + (a.re * b.im);
+
+    return ret;
+}
+
+complex_t add (complex_t a, complex_t b) {
+    complex_t ret = {
+        .re = 0,
+        .im = 0
+    };
+
+    ret.re = a.re + b.re;
+    ret.im = a.im + b.im;
+
+    return ret;
+}
+
+unsigned int mandelbrot (complex_t c) {
+    complex_t z = {
+        .re = 0,
+        .im = 0
+    };
+    unsigned int ret = 0;
+
+    while (mag (z) <= 2 && ret < MAX_ITER) {
+        z = mult (z, z);
+        z = add (z, c);
+        ret++;
+    }
+
+    return ret;
 }
 
 /* Draws the pixel to the screen */
@@ -72,8 +124,7 @@ int main () {
     struct sigaction usr_action;
     double x_inc;
     double y_inc;
-    double x_pos;
-    double y_pos;
+    complex_t pos;
 
     const char *CSI = "\x1B[";
 
@@ -142,9 +193,12 @@ int main () {
     memcpy (fb, buf, finfo.smem_len);
 
     /* Test every point */
-    for (y_pos = range_min + y_inc; y_pos < range_max; y_pos += y_inc) {
-        for (x_pos = domain_min + x_inc; x_pos < domain_max; x_pos += x_inc) {
-            paint (buf, c_position (x_pos, y_pos), color (255, 255, 255, 0));
+    for (pos.im = range_min + y_inc; pos.im < range_max; pos.im += y_inc) {
+        for (pos.re = domain_min + x_inc; pos.re < domain_max; pos.re += x_inc) {
+            if (mandelbrot (pos) == MAX_ITER)
+                paint (buf, c_position (pos), color (0, 0, 0, 0));
+            else
+                paint (buf, c_position (pos), color (255, 255, 255, 0));
         }
     }
     memcpy (fb, buf, finfo.smem_len);
