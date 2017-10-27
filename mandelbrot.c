@@ -87,6 +87,10 @@ int main () {
         }
     }
 
+    for (row = 0; row < info.yres_virtual; row++) {
+        paint (fb, position (row, row), color (255, 255, 255, 255));
+    }
+
     /* Close the framebuffer */
     munmap (fb, finfo.smem_len);
     close (fb_file);
