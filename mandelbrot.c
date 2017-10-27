@@ -1,5 +1,7 @@
 #include <fcntl.h>
 #include <signal.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <linux/fb.h>
 #include <sys/ioctl.h>
@@ -29,9 +31,9 @@ unsigned int color (char r, char g, char b, char a) {
     return ret;
 }
 
-/* Turns row,col into an absolute position */
-unsigned int position (unsigned int row, unsigned int col) {
-    return (row * (finfo.line_length / (info.bits_per_pixel / 8))) + col;
+/* Turns x,y into an absolute position */
+unsigned int position (double x_pos, double y_pos) {
+    return (y_pos * (finfo.line_length / (info.bits_per_pixel / 8))) + x_pos;
 }
 
 /* Turns a complex point into an absolute position */
@@ -69,10 +71,11 @@ void paint (unsigned int *fb, unsigned int pos, unsigned int color) {
 int main () {
     int fb_file;
     unsigned int *fb;
+    unsigned int *buf;
     sigset_t mask;
     struct sigaction usr_action;
-    unsigned int row;
-    unsigned int col;
+    double y_pos;
+    double x_pos;
 
     const char *CSI = "\x1B[";
 
@@ -103,6 +106,14 @@ int main () {
         return -1;
     }
 
+    /* Attempt to create a temp screen buffer */
+    buf = calloc (finfo.smem_len, 1);
+    if (!buf) {
+        write (2, "Error creating temp buffer.\n", 28);
+        munmap (fb, finfo.smem_len);
+        close (fb_file);
+    }
+
     /* Set up the SIGINT handler */
     sigfillset (&mask);
     usr_action.sa_handler = handler;
@@ -121,24 +132,17 @@ int main () {
     write (1, "?25l", 4);
 
     /* Clear the screen */
-    for (row = 0; row < info.yres_virtual; row++) {
-        for (col = 0; col < info.xres_virtual; col++) {
-            paint (fb, position (row, col), color (0, 0, 0, 0));
+    for (x_pos = 0; x_pos < info.xres_virtual; x_pos++) {
+        for (y_pos = 0; y_pos < info.yres_virtual; y_pos++) {
+            paint (buf, position (x_pos, y_pos), color (255, 255, 255, 0));
         }
     }
 
-    paint (fb, c_position (-2, 0), color (255, 255, 255, 0));
-    paint (fb, c_position (-1, 0), color (255, 255, 255, 0));
-    paint (fb, c_position (0, 0), color (255, 255, 255, 0));
-    paint (fb, c_position (0.999, 0), color (255, 255, 255, 0));
-
-    paint (fb, c_position (0, 0.999), color (255, 255, 255, 0));
-    paint (fb, c_position (0, -0.999), color (255, 255, 255, 0));
-
-    paint (fb, c_position (-0.5, -0.5), color (255, 255, 255, 0));
-    paint (fb, c_position (0.25, 0.25), color (255, 255, 255, 0));
+    /* Copy buffer into screen */
+    memcpy (fb, buf, finfo.smem_len);
 
     /* Close the framebuffer */
+    free (buf);
     munmap (fb, finfo.smem_len);
     close (fb_file);
 
