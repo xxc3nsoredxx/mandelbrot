@@ -6,8 +6,6 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 
-#define ABS(X) ((X < 0) ? (-1 * (X)) : (X))
-
 /* Global variables */
 volatile sig_atomic_t interrupted = 0;
 struct fb_var_screeninfo info;
@@ -42,16 +40,20 @@ unsigned int c_position (double re, double im) {
     double range_normal;
     double domain_percent;
     double range_percent;
+
     /* Return -1 if the position is outside the domain/range */
     if (re < domain_min || re > domain_max) return -1;
     else if (im < range_min || im > range_max) return -1;
 
+    /* Shift the domain/range so that it starts at 0 */
     domain_normal = domain_max - domain_min;
     range_normal = range_max - range_min;
 
+    /* Fix the point */
     re -= domain_min;
     im -= range_min;
 
+    /* Calculate how far in the point is compared the domain/range */
     domain_percent = re / domain_normal;
     range_percent = 1 - (im / range_normal);
 
