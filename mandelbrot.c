@@ -16,6 +16,8 @@ double domain_min;
 double domain_max;
 double range_min;
 double range_max;
+double domain_normal;
+double range_normal;
 
 void handler () {
     interrupted = 1;
@@ -31,25 +33,19 @@ unsigned int color (char r, char g, char b, char a) {
     return ret;
 }
 
-/* Turns x,y into an absolute position */
-unsigned int position (double x_pos, double y_pos) {
-    return (y_pos * (finfo.line_length / (info.bits_per_pixel / 8))) + x_pos;
+/* Turns row,col into an absolute position */
+unsigned int position (unsigned int row, unsigned int col) {
+    return (row * (finfo.line_length / (info.bits_per_pixel / 8))) + col;
 }
 
 /* Turns a complex point into an absolute position */
 unsigned int c_position (double re, double im) {
-    double domain_normal;
-    double range_normal;
     double domain_percent;
     double range_percent;
 
     /* Return -1 if the position is outside the domain/range */
     if (re < domain_min || re > domain_max) return -1;
     else if (im < range_min || im > range_max) return -1;
-
-    /* Shift the domain/range so that it starts at 0 */
-    domain_normal = domain_max - domain_min;
-    range_normal = range_max - range_min;
 
     /* Fix the point */
     re -= domain_min;
@@ -59,13 +55,13 @@ unsigned int c_position (double re, double im) {
     domain_percent = re / domain_normal;
     range_percent = 1 - (im / range_normal);
 
-    return position (range_percent * info.yres_virtual,
-                     domain_percent * info.xres_virtual);
+    return position ((unsigned int)(range_percent * info.yres_virtual),
+                     (unsigned int)(domain_percent * info.xres_virtual));
 }
 
 /* Draws the pixel to the screen */
-void paint (unsigned int *fb, unsigned int pos, unsigned int color) {
-    if (pos != -1) *(fb + pos) = color;
+void paint (unsigned int *buf, unsigned int pos, unsigned int color) {
+    if (pos != (unsigned int)-1) *(buf + pos) = color;
 }
 
 int main () {
@@ -74,8 +70,10 @@ int main () {
     unsigned int *buf;
     sigset_t mask;
     struct sigaction usr_action;
-    double y_pos;
+    double x_inc;
+    double y_inc;
     double x_pos;
+    double y_pos;
 
     const char *CSI = "\x1B[";
 
@@ -112,6 +110,7 @@ int main () {
         write (2, "Error creating temp buffer.\n", 28);
         munmap (fb, finfo.smem_len);
         close (fb_file);
+        return -1;
     }
 
     /* Set up the SIGINT handler */
@@ -127,18 +126,27 @@ int main () {
     range_min = -1;
     range_max = 1;
 
+    /* Shift the domain/range so that it starts at 0 */
+    domain_normal = domain_max - domain_min;
+    range_normal = range_max - range_min;
+
+    /* Calculate x and y increments */
+    x_inc = domain_normal / info.xres_virtual;
+    y_inc = range_normal / info.yres_virtual;
+
     /* Hide cursor */
     write (1, CSI, 2);
     write (1, "?25l", 4);
 
-    /* Clear the screen */
-    for (x_pos = 0; x_pos < info.xres_virtual; x_pos++) {
-        for (y_pos = 0; y_pos < info.yres_virtual; y_pos++) {
-            paint (buf, position (x_pos, y_pos), color (255, 255, 255, 0));
+    /* Clear the screen (copies the empty buffer) */
+    memcpy (fb, buf, finfo.smem_len);
+
+    /* Test every point */
+    for (y_pos = range_min + y_inc; y_pos < range_max; y_pos += y_inc) {
+        for (x_pos = domain_min + x_inc; x_pos < domain_max; x_pos += x_inc) {
+            paint (buf, c_position (x_pos, y_pos), color (255, 255, 255, 0));
         }
     }
-
-    /* Copy buffer into screen */
     memcpy (fb, buf, finfo.smem_len);
 
     /* Close the framebuffer */
