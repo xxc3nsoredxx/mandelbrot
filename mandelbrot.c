@@ -7,21 +7,25 @@
 #include <sys/types.h>
 
 volatile sig_atomic_t interrupted = 0;
+struct fb_var_screeninfo info;
+struct fb_fix_screeninfo finfo;
 
 void handler () {
     interrupted = 1;
 }
 
-unsigned int color (char r, char g, char b) {
+unsigned int color (char r, char g, char b, char a) {
     unsigned int ret = 0;
-    ret |= r << (16) & 0xFF0000;
-    ret |= g << (8) & 0xFF00;
-    ret |= b & 0xFF;
+    /* 0xBBGGRRAA */
+    ret |= b << 24;
+    ret |= g << 16;
+    ret |= r << 8;
+    ret |= a;
     return ret;
 }
 
-unsigned int position (int row, int col, int xres) {
-    return (row * xres) + (row * 10) + col;
+unsigned int position (int row, int col) {
+    return (row * (finfo.line_length / (info.bits_per_pixel / 8))) + col;
 }
 
 void paint (unsigned int *fb, unsigned int pos, unsigned int color) {
@@ -30,8 +34,6 @@ void paint (unsigned int *fb, unsigned int pos, unsigned int color) {
 
 int main () {
     int fb_file;
-    struct fb_var_screeninfo info;
-    unsigned long pixels;
     unsigned int *fb;
     sigset_t mask;
     struct sigaction usr_action;
@@ -49,16 +51,18 @@ int main () {
 
     /* Attempt to get information about the screen */
     if (ioctl (fb_file, FBIOGET_VSCREENINFO, &info)) {
-        write (2, "Error getting screen info.\n", 27);
+        write (2, "Error getting screen var info.\n", 31);
+        close (fb_file);
+        return -1;
+    }
+    if (ioctl (fb_file, FBIOGET_FSCREENINFO, &finfo)) {
+        write (2, "Error getting screen fix info.\n", 31);
         close (fb_file);
         return -1;
     }
 
-    /* Calculate the pixel count */
-    pixels = info.xres * info.yres;
-
     /* Attempt to mmap the framebuffer */
-    fb = mmap (0, (pixels + (info.yres * 10)) * 4, PROT_READ|PROT_WRITE, MAP_SHARED, fb_file, 0);
+    fb = mmap (0, finfo.smem_len, PROT_READ|PROT_WRITE, MAP_SHARED, fb_file, 0);
     if ((long)fb == (long)MAP_FAILED) {
         write (2, "Error mapping framebuffer to memory.\n", 37);
         close (fb_file);
@@ -77,14 +81,14 @@ int main () {
     write (1, "?25l", 4);
 
     /* Draw to the screen */
-    for (row = 0; row < info.yres; row++) {
-        for (col = 0; col < info.xres; col++) {
-            paint (fb, position (row, col, info.xres), color (88, 88, 8));
+    for (row = 0; row < info.yres_virtual; row++) {
+        for (col = 0; col < info.xres_virtual; col++) {
+            paint (fb, position (row, col), color (88, 88, 8, 0));
         }
     }
 
     /* Close the framebuffer */
-    munmap (fb, (pixels + (info.yres * 10)) * 4);
+    munmap (fb, finfo.smem_len);
     close (fb_file);
 
     /* Wait for SIGINT */
