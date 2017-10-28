@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <sys/types.h>
 
+#define ABS(X) (((X) < 0) ? (-1 * (X)) : (X))
 #define MAX_ITER 100
 
 typedef struct {
@@ -31,13 +32,58 @@ void handler () {
     interrupted = 1;
 }
 
-/* Creates a color from r, g, b, and a values */
-unsigned int color (char r, char g, char b, char a) {
+/* Creates an rgb color from hsv values */
+unsigned int color (int h, float s, float v) {
     unsigned int ret = 0;
-    ret |= a << 24;
+    double c;
+    double x;
+    double m;
+    double rp;
+    double gp;
+    double bp;
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+
+    c = v * s;
+    x = c * (1 - ABS(((h / 60) % 2) - 1));
+    m = v - c;
+
+    h %= 360;
+    if (0 <= h && h < 60) {
+        rp = c;
+        gp = x;
+        bp = 0;
+    } else if (60 <= h && h < 120) {
+        rp = x;
+        gp = c;
+        bp = 0;
+    } else if (120 <= h && h < 180) {
+        rp = 0;
+        gp = c;
+        bp = x;
+    } else if (180 <= h && h < 240) {
+        rp = 0;
+        gp = x;
+        bp = c;
+    } else if (240 <= h && h < 300) {
+        rp = x;
+        gp = 0;
+        bp = c;
+    } else if (200 <= h && h < 360) {
+        rp = c;
+        gp = 0;
+        bp = x;
+    }
+
+    r = (rp + m) * 255;
+    g = (gp + m) * 255;
+    b = (bp + m) * 255;
+
     ret |= r << 16;
     ret |= g << 8;
     ret |= b;
+
     return ret;
 }
 
@@ -67,10 +113,12 @@ unsigned int c_position (complex_t c) {
                      (unsigned int)(domain_percent * info.xres_virtual));
 }
 
+/* Returns the magnitude of a complex number */
 double mag (complex_t c) {
     return sqrt ((c.re * c.re) + (c.im * c.im));
 }
 
+/* Multiplies two complex numbers */
 complex_t mult (complex_t a, complex_t b) {
     complex_t ret = {
         .re = 0,
@@ -83,6 +131,7 @@ complex_t mult (complex_t a, complex_t b) {
     return ret;
 }
 
+/* Adds two complex numbers */
 complex_t add (complex_t a, complex_t b) {
     complex_t ret = {
         .re = 0,
@@ -95,6 +144,7 @@ complex_t add (complex_t a, complex_t b) {
     return ret;
 }
 
+/* Tests how close to the Mandelbrot set a point is */
 unsigned int mandelbrot (complex_t c) {
     complex_t z = {
         .re = 0,
@@ -125,6 +175,7 @@ int main () {
     double x_inc;
     double y_inc;
     complex_t pos;
+    unsigned int m;
 
     const char *CSI = "\x1B[";
 
@@ -195,10 +246,9 @@ int main () {
     /* Test every point */
     for (pos.im = range_min + y_inc; pos.im < range_max; pos.im += y_inc) {
         for (pos.re = domain_min + x_inc; pos.re < domain_max; pos.re += x_inc) {
-            if (mandelbrot (pos) == MAX_ITER)
-                paint (buf, c_position (pos), color (0, 0, 0, 0));
-            else
-                paint (buf, c_position (pos), color (255, 255, 255, 0));
+            m = mandelbrot (pos);
+            paint (buf, c_position (pos),
+                   color (360 * m / MAX_ITER, 1, (m < MAX_ITER) ? 1 : 0));
         }
     }
     memcpy (fb, buf, finfo.smem_len);
