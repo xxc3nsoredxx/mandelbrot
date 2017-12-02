@@ -241,9 +241,16 @@ int main () {
     write (1, "?25l", 4);
 
     /* Clear the screen (copies the empty buffer) */
-    memcpy (fb, buf, finfo.smem_len);
+    //memcpy (fb, buf, finfo.smem_len);
+    write (1, CSI, 2);
+    write (1, "2J", 2);
 
-    /* Test every point */
+    /* Move cursor to top left corner */
+    write (1, CSI, 2);
+    write (1, "H", 1);
+
+    /* Test every point
+     * Draw to a temporary buffer */
     for (pos.im = range_min + y_inc; pos.im < range_max; pos.im += y_inc) {
         for (pos.re = domain_min + x_inc; pos.re < domain_max; pos.re += x_inc) {
             m = mandelbrot (pos);
@@ -251,15 +258,19 @@ int main () {
                    color (360 * m / MAX_ITER, 1, (m < MAX_ITER) ? 1 : 0));
         }
     }
+    /* Copy buffer to screen */
     memcpy (fb, buf, finfo.smem_len);
+
+    /* Wait for SIGINT */
+    while (!interrupted);
+
+    /* Clear the screen */
+    memset (fb, 0, finfo.smem_len);
 
     /* Close the framebuffer */
     free (buf);
     munmap (fb, finfo.smem_len);
     close (fb_file);
-
-    /* Wait for SIGINT */
-    while (!interrupted);
 
     /* Show cursor */
     write (1, CSI, 2);
